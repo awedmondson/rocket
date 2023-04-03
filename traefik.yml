@@ -1,0 +1,42 @@
+################################################################
+# API and dashboard configuration
+################################################################
+api:
+  # Dashboard
+  #
+  #
+  dashboard: true
+  insecure: true
+################################################################
+# Docker configuration backend
+################################################################
+providers:
+  docker:
+    exposedByDefault: false
+  file:
+    directory: ./dynamic_config/ 
+    watch: true
+
+
+
+################################################################
+# Traefik Logging
+################################################################
+log:
+  level: INFO
+
+################################################################
+# Entrypoint
+################################################################
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+    http:
+      tls: {}
+#  middlewares:
+#    test-stripprefix:
+#      stripPrefix:
+#        prefixes:
+#          - "/cat"

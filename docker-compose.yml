@@ -1,0 +1,77 @@
+version: '3'
+
+services:
+  traefik:
+    # The latest official supported Traefik docker image
+    image: traefik:latest
+    ports:
+      # Exposes port 80 for incomming web requests
+      - "80:80"
+      - "443:443"
+      # The Web UI port http://0.0.0.0:8080 (enabled by --api.insecure=true)
+      - "8080:8080"
+
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Copies the Let's Encrypt certificate locally for ease of backing up
+      - ~/github/certs:/ssl
+      # Mounts the Traefik static configuration inside the Traefik container
+      - ./traefik.yml:/etc/traefik/traefik.yml
+      - ./data/configurations:/dynamic_config
+      
+  rocketchat:
+     image: rocketchat/rocket.chat:3.17.0
+     command: bash -c 'for i in `seq 1 30`; do node main.js && s=$$? && break || s=$$?; echo "Tried $$i times. Waiting 5 secs..."; sleep 5; done; (exit $$s)'
+     restart: always
+
+     volumes:
+       - ./uploads:/app/uploads
+     environment:
+       - PORT=3000
+       - ROOT_URL=https://rocket.1024k.uk
+       - VIRTUAL_HOSTs=fedora.adal-vimba.ts.net
+       - MONGO_URL=mongodb://mongo:27017/rocketchat
+       - MONGO_OPLOG_URL=mongodb://mongo:27017/local
+       - Accounts_UseDNSDomainCheck=false
+     depends_on:
+       - mongo
+
+     labels:
+       - "traefik.enable=true"
+ # Routers
+       - "traefik.http.routers.rocketchat.rule=Host(`rocket.1024k.uk`)"
+       - "traefik.http.routers.rocketchat.entrypoints=web"
+       - "traefik.http.routers.rocketchat.middlewares=test-redirectscheme"
+       - "traefik.http.routers.rocketchat-secure.rule=Host(`rocket.1024k.uk`)"
+       - "traefik.http.routers.rocketchat-secure.entrypoints=websecure"
+  # Services
+#       - "traefik.http.services.rocket-secure.loadbalancer.server.url=192.168.144.4:3000"
+
+  # Define middleware for rocketchat-app
+#       - "traefik.http.middlewares.rocket-strip-prefix.stripprefix.prefixes=/rocketchat"
+  # Apply path /rocketchat to middleware to router
+#       - "traefik.http.routers.rocketchat-secure.middlewares=rocket-strip-prefix"
+  # Redirect Scheme HTTP -> HTTPS
+       - "traefik.http.middlewares.test-redirectscheme.redirectscheme.scheme=https"
+       - "traefik.http.middlewares.test-redirectscheme.redirectscheme.permanent=true"
+
+
+  mongo:
+     image: mongo:4.0
+     restart: always
+     volumes:
+       - ./data/db:/data/db
+     command: mongod --smallfiles --oplogSize 128 --replSet rs0 --storageEngine=mmapv1
+
+  mongo-init-replica:
+     image: mongo:4.0
+     command: 'bash -c "for i in `seq 1 30`; do mongo mongo/rocketchat --eval \"rs.initiate({ _id: ''rs0'', members: [ { _id: 0, host: ''localhost:27017'' } ]})\" && s=$$? && break || s=$$?; echo \"Tried $$i times. Waiting 5 secs...\"; sleep 5; done; (exit $$s)"'
+     depends_on:
+       - mongo
+
+
+
+
+
+
